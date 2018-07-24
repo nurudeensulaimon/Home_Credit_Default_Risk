@@ -1,0 +1,500 @@
+#Libraries
+install.packages("gmodels")
+library(dplyr)
+library(gmodels)
+library(rpart)
+library(lattice)
+library(ggplot2)
+
+#Read File
+App <- read.csv('/Users/nex/Desktop/DATASET/CAPSTONE_DATA/application_train.csv', head=TRUE)
+
+
+#Create another dataframe so original is in tact.
+App_New <- App
+App_Trial <- App
+######################################
+#DELETE VARIABLES THAT AREN'T NEEDED#
+######################################
+
+#Delete  FLAG_MOBIL as only one record was marked no
+App_New <- App_New[,-23]
+
+##########################################
+#Missing Variables Imputed and Outliers###
+#########################################
+
+#Set cap to the 99%
+App_New$AMT_INCOME_TOTAL<- ifelse(App_New$AMT_INCOME_TOTAL > 472500,
+                                  472500,App_New$AMT_INCOME_TOTAL)
+
+
+#Create log to help distribution be normal
+App_New$AMT_INCOME_TOTAL_LOG <- log(App_New$AMT_INCOME_TOTAL)
+
+
+#Set cap to the 99%
+App_New$AMT_CREDIT<- ifelse(App_New$AMT_CREDIT > 1854000,
+                            1854000,App_New$AMT_CREDIT)
+
+#Create log to help distribution be normal
+App_New$AMT_CREDIT_LOG <- log(App_New$AMT_CREDIT)
+
+#Divide by median years to get Annuity Median of AMT_CREDIT/AMT_ANNUITy is 20
+App_New$AMT_ANNUITY <- ifelse(is.na(App_New$AMT_ANNUITY), App_New$AMT_CREDIT/20, 
+                              App_New$AMT_ANNUITY)
+
+#Set Cap to 99%
+App_New$AMT_ANNUITY<- ifelse(App_New$AMT_ANNUITY > 70006.5,
+                             70006.5,App_New$AMT_ANNUITY)
+
+#Create log to help distribution be normal
+App_New$AMT_ANNUITY_LOG <- log(App_New$AMT_ANNUITY)
+
+#Median is AMT_CREDIT greater than AMT_GOODS_PRICEby 38313
+App_New$AMT_GOODS_PRICE <- ifelse(is.na(App_New$AMT_GOODS_PRICE), App_New$AMT_CREDIT-38313,App_New$AMT_GOODS_PRICE)
+
+#Set Cap to 99%
+App_New$AMT_GOODS_PRICE<- ifelse(App_New$AMT_GOODS_PRICE > 1800000,
+                                 1800000,App_New$AMT_GOODS_PRICE)
+
+#Create log to help distribution be normal
+App_New$AMT_GOODS_PRICE_LOG <- log(App_New$AMT_GOODS_PRICE)
+
+#######################
+#Create New Variables## 
+######################
+
+#Flag to see if Insurance is added to Goods price
+App_New$App_GOOD_Diff_Flag <- ifelse(App_New$AMT_GOODS_PRICE - App_New$AMT_CREDIT > 0,1,0)
+
+#Number of Months for the Annuity
+App_New$ANNUITY_TIME <- App_New$AMT_CREDIT/App_New$AMT_ANNUITY
+
+#Amount of Annuity per month per yearly Income
+App_New$ANNUITY_INCOME <- App_New$AMT_ANNUITY/App_New$AMT_INCOME_TOTAL
+sum(is.na(App_New$AMOUNT))
+#Cap at 99%
+App_New$ANNUITY_INCOME <- ifelse(App_New$ANNUITY_INCOME > .4786760,
+                                 .4786760,App_New$ANNUITY_INCOME)
+
+##################################################
+# Checking for missing values on Factor Varibles ##
+#################################################
+summary(App_New$NAME_CONTRACT_TYPE)
+summary(App_New$CODE_GENDER) # XNA = 4 Missing Values
+summary(App_New$NAME_TYPE_SUITE)
+summary(App_New$NAME_INCOME_TYPE)
+summary(App_New$NAME_EDUCATION_TYPE)
+summary(App_New$NAME_FAMILY_STATUS)          
+summary(App_New$NAME_HOUSING_TYPE)
+summary(App_New$WEEKDAY_APPR_PROCESS_START)
+summary(App_New$HOUSETYPE_MODE)
+summary(App_New$FONDKAPREMONT_MODE)
+summary(App_New$WALLSMATERIAL_MODE)
+summary(App_New$OCCUPATION_TYPE)
+summary(App_New$ORGANIZATION_TYPE) # XNA =55374 Missing Values 
+
+
+#################################################
+# Renaming of Character Variables                ##
+#################################################
+# Rename NAME_CONTRACT_TYPE To "CONTRACT_TYPE"
+colnames(App_New)[3] <- "CONTRACT_TYPE"
+head(App_New[3])
+
+# Rename NAME_TYPE_SUITE To 
+colnames(App_New)[12] <- "ACCOMPANIMENT_TYPE"
+head(App_New[12])
+
+# Rename NAME_INCOME_TYPE to "INCOME_TYPE"
+colnames(App_New)[13] <- "INCOME_TYPE"
+head(App_New[13])
+
+# Rename NAME_EDUCATION_TYPE to "EDUCATION_TYPE"
+colnames(App_New)[14] <- "EDUCATION_TYPE"
+head(App_New[14])
+
+# Rename NAME_FAMILY_STATUS to "FAMILY_STATUS"
+colnames(App_New)[15] <- "FAMILY_STATUS"
+head(App_New[15])
+
+# Rename NAME_HOUSING_TYPE  to "HOUSING_TYPE"
+colnames(App_New)[16] <- "HOUSING_TYPE"
+head(App_New[16])
+
+# Rename WEEKDAY_APPR_PROCESS_START
+colnames(App_New)[32] <- "PROCESS_START_DAY"
+head(App_New[32])
+
+# Rename FONDKAPREMONT to "REPAIR_FINANCE"
+colnames(App_New)[86] <- "REPAIR_FINANCE"
+head(App_New[86])
+
+# Rename HOUSETYPE_MODE to 
+colnames(App_New)[87] <- "BUILDING_MODE"
+head(App_New)[87]
+
+# Rename WALLSMATERIAL_MODE to "WALLS_MATERIAL"
+colnames(App_New)[89] <- "WALLS_MATERIAL"
+head(App_New)[89]
+
+#################################################
+#From CODE_GENDER Replace XNA with "Female."    ##
+#################################################
+App_New$CODE_GENDER <- replace(App_New$CODE_GENDER, App_New$CODE_GENDER=="XNA","F")
+summary(App_New$CODE_GENDER)
+
+###################################################
+# Cross Table of Character Variables Distribution ##
+###################################################
+
+# Distribution of Type of Contract
+CrossTable(App_New$CONTRACT_TYPE)
+
+# Applicants Distibution base on Gender
+CrossTable(App_New$CODE_GENDER)
+
+CrossTable(App_New$ACCOMPANIMENT_TYPE)
+
+# Applicants Employment Information
+CrossTable(App_New$INCOME_TYPE )
+
+
+# Applicants Level of Education
+CrossTable(App_New$EDUCATION_TYPE)
+
+# Applicants Marital Status 
+CrossTable(App_New$FAMILY_STATUS)
+
+# Applicants Housing Type
+CrossTable(App_New$HOUSING_TYPE)
+
+# Applicants Process Start Day
+CrossTable(App_New$PROCESS_START_DAY)
+
+# Applicants House Type 
+CrossTable(App_New$BUILDING_MODE)
+
+# Applicants Building Structure Type
+CrossTable(App_New$WALLS_MATERIAL)
+
+# Applicants Method of Financing Repair
+CrossTable(App_New$REPAIR_FINANCE)
+
+########################################
+# Median Imputation for Normalized data ##
+########################################
+App_New_Replace <- App_New
+Missing_Index <- which(is.na(App_New$EXT_SOURCE_1))
+App_New_Replace$EXT_SOURCE_1[Missing_Index] <- median(App_New$EXT_SOURCE_1,na.rm=TRUE)
+sum(is.na(App_New_Replace$EXT_SOURCE_1))
+
+# Imputation for EXT_SOURCE_2
+Missing_Index1 <- which(is.na(App_New$EXT_SOURCE_2))
+App_New_Replace$EXT_SOURCE_2[Missing_Index1] <- median(App_New$EXT_SOURCE_2,na.rm=TRUE)
+sum(is.na(App_New_Replace$EXT_SOURCE_2))
+
+# Imputation for EXT_SOURCE_3
+Missing_Index2 <- which(is.na(App_New$EXT_SOURCE_3))
+App_New_Replace$EXT_SOURCE_3[Missing_Index2] <- median(App_New$EXT_SOURCE_3,na.rm=TRUE)
+sum(is.na(App_New_Replace$EXT_SOURCE_3))
+
+# Imputation for Apartments Average 
+Missing_Index4 <- which(is.na(App_New$APARTMENTS_AVG))
+App_New_Replace$APARTMENTS_AVG[Missing_Index4] <- median(App_New$APARTMENTS_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$APARTMENTS_AVG))
+
+# Imputation for BASEMENTAREA_AVERAGE 
+Missing_Index5 <- which(is.na(App_New$BASEMENTAREA_AVG))
+App_New_Replace$BASEMENTAREA_AVG[Missing_Index5] <- median(App_New$APARTMENTS_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$BASEMENTAREA_AVG))
+
+# Imputation for YEARS_BEGINEXPLUATATION_AVG
+Missing_Index6 <- which(is.na(App_New$YEARS_BEGINEXPLUATATION_AVG))
+App_New_Replace$YEARS_BEGINEXPLUATATION_AVG[Missing_Index6] <- median(App_New$YEARS_BEGINEXPLUATATION_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BEGINEXPLUATATION_AVG))
+summary(App_New_Replace$YEARS_BEGINEXPLUATATION_AVG)
+
+# Imputation for YEARS_BUILD_AVG
+Missing_Index7 <- which(is.na(App_New$YEARS_BUILD_AVG))
+App_New_Replace$YEARS_BUILD_AVG[Missing_Index7] <- median(App_New$YEARS_BUILD_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BUILD_AVG))
+
+# Imputation for COMMONAREA_AVG
+Missing_Index8 <- which(is.na(App_New$COMMONAREA_AVG))
+App_New_Replace$COMMONAREA_AVG[Missing_Index8] <- median(App_New$COMMONAREA_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$COMMONAREA_AVG))
+summary(App_New_Replace$COMMONAREA_AVG)
+
+# Imputation for ELEVATORS_AVG
+Missing_Index9 <- which(is.na(App_New$ELEVATORS_AVG))
+App_New_Replace$ELEVATORS_AVG[Missing_Index9] <- median(App_New$ELEVATORS_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$ELEVATORS_AVG))
+
+# Imputation for ENTRANCES_AVG
+Missing_Index10 <- which(is.na(App_New$FLOORSMAX_AVG))
+App_New_Replace$FLOORSMAX_AVG[Missing_Index10] <- median(App_New$FLOORSMAX_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMAX_AVG))
+summary(App_New_Replace$FLOORSMAX_AVG)
+
+# Imputation for FLOORSMIN_AVG
+Missing_Index11 <- which(is.na(App_New$FLOORSMIN_AVG))
+App_New_Replace$FLOORSMIN_AVG[Missing_Index11] <- median(App_New$FLOORSMIN_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMIN_AVG))
+summary(App_New_Replace$FLOORSMIN_AVG)
+
+# Imputation for LANDAREA_AVG
+Missing_Index12 <- which(is.na(App_New$LANDAREA_AVG))
+App_New_Replace$LANDAREA_AVG[Missing_Index12] <- median(App_New$LANDAREA_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$LANDAREA_AVG))
+summary(App_New_Replace$LANDAREA_AVG)
+
+# Imputation for LIVINGAPARTMENTS_AVG
+Missing_Index13 <- which(is.na(App_New$LIVINGAPARTMENTS_AVG))
+App_New_Replace$LIVINGAPARTMENTS_AVG[Missing_Index13] <- median(App_New$LIVINGAPARTMENTS_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$LIVINGAPARTMENTS_AVG))
+summary(App_New_Replace$LIVINGAPARTMENTS_AVG)
+
+# Imputation for LIVINGAREA_AVG
+Missing_Index14 <- which(is.na(App_New$LIVINGAREA_AVG))
+App_New_Replace$LIVINGAREA_AVG[Missing_Index14] <- median(App_New$LIVINGAREA_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$LIVINGAREA_AVG))
+
+# Imputation for NONLIVINGAPARTMENTS_AVG
+Missing_Index15 <- which(is.na(App_New$NONLIVINGAPARTMENTS_AVG))
+App_New_Replace$NONLIVINGAPARTMENTS_AVG[Missing_Index15] <- median(App_New$NONLIVINGAPARTMENTS_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAPARTMENTS_AVG))
+
+# Imputation for NONLIVINGAREA_AVG
+Missing_Index16 <- which(is.na(App_New$NONLIVINGAREA_AVG))
+App_New_Replace$NONLIVINGAREA_AVG[Missing_Index16] <- median(App_New$NONLIVINGAREA_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAREA_AVG))
+
+# Imputation for APARTMENTS_MODE 
+Missing_Index17 <- which(is.na(App_New$APARTMENTS_MODE))
+App_New_Replace$APARTMENTS_MODE [Missing_Index17] <- median(App_New$APARTMENTS_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$APARTMENTS_MODE))
+
+# Imputation for BASEMENTAREA_MODE 
+Missing_Index18 <- which(is.na(App_New$BASEMENTAREA_MODE))
+App_New_Replace$BASEMENTAREA_MODE[Missing_Index18] <- median(App_New$BASEMENTAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$BASEMENTAREA_MODE))
+
+# Imputation for YEARS_BEGINEXPLUATATION_MODE
+Missing_Index19 <- which(is.na(App_New$YEARS_BEGINEXPLUATATION_MODE))
+App_New_Replace$YEARS_BEGINEXPLUATATION_MODE[Missing_Index19] <- median(App_New$YEARS_BEGINEXPLUATATION_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BEGINEXPLUATATION_MODE))
+
+# Imputation for YEARS_BUILD_MODE
+Missing_Index20 <- which(is.na(App_New$YEARS_BUILD_MODE))
+App_New_Replace$YEARS_BUILD_MODE[Missing_Index20] <- median(App_New$YEARS_BUILD_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BUILD_MODE))
+
+# Imputation for COMMONAREA_MODE
+Missing_Index21 <- which(is.na(App_New$COMMONAREA_MODE))
+App_New_Replace$COMMONAREA_MODE[Missing_Index21] <- median(App_New$COMMONAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$COMMONAREA_MODE))
+
+# Imputation for ELEVATORS_MODE 
+Missing_Index22 <- which(is.na(App_New$ELEVATORS_MODE))
+App_New_Replace$ELEVATORS_MODE[Missing_Index22] <- median(App_New$ELEVATORS_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$ELEVATORS_MODE))
+
+# Imputation for ENTRANCES_MODE 
+Missing_Index23 <- which(is.na(App_New$ENTRANCES_MODE))
+App_New_Replace$ENTRANCES_MODE[Missing_Index23] <- median(App_New$ENTRANCES_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$ENTRANCES_MODE))
+
+# Imputation for FLOORSMAX_MODE 
+Missing_Index24 <- which(is.na(App_New$FLOORSMAX_MODE))
+App_New_Replace$FLOORSMAX_MODE[Missing_Index24] <- median(App_New$FLOORSMAX_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMAX_MODE))
+
+# Imputation for FLOORSMIN_MODE 
+Missing_Index25 <- which(is.na(App_New$FLOORSMIN_MODE))
+App_New_Replace$FLOORSMIN_MODE[Missing_Index25] <- median(App_New$FLOORSMIN_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMIN_MODE))
+
+
+# Imputation for LANDAREA_MODE 
+Missing_Index26 <- which(is.na(App_New$LANDAREA_MODE))
+App_New_Replace$LANDAREA_MODE[Missing_Index26] <- median(App_New$LANDAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$LANDAREA_MODE))
+
+# Imputation for LIVINGAPARTMENTS_MODE 
+Missing_Index27 <- which(is.na(App_New$LIVINGAPARTMENTS_MODE))
+App_New_Replace$ LIVINGAPARTMENTS_MODE[Missing_Index27] <- median(App_New$LIVINGAPARTMENTS_MODE ,na.rm=TRUE)
+sum(is.na(App_New_Replace$LIVINGAPARTMENTS_MODE ))
+
+# Imputation for LIVINGAREA_MODE 
+Missing_Index28 <- which(is.na(App_New$LIVINGAREA_MODE))
+App_New_Replace$LIVINGAREA_MODE[Missing_Index28] <- median(App_New$LIVINGAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$LIVINGAREA_MODE))
+
+# Imputation for NONLIVINGAPARTMENTS_MODE
+Missing_Index29 <- which(is.na(App_New$NONLIVINGAPARTMENTS_MODE))
+App_New_Replace$NONLIVINGAPARTMENTS_MODE[Missing_Index29] <- median(App_New$NONLIVINGAPARTMENTS_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAPARTMENTS_MODE))
+
+# Imputation for NONLIVINGAREA_MODE
+Missing_Index30 <- which(is.na(App_New$NONLIVINGAREA_MODE))
+App_New_Replace$NONLIVINGAREA_MODE[Missing_Index30] <- median(App_New$NONLIVINGAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAREA_MODE))
+
+# Imputation for APARTMENTS_MEDI
+Missing_Index31 <- which(is.na(App_New$APARTMENTS_MEDI))
+App_New_Replace$APARTMENTS_MEDI[Missing_Index31] <- median(App_New$APARTMENTS_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$APARTMENTS_MEDI))
+
+# Imputation for BASEMENTAREA_MEDI
+Missing_Index32 <- which(is.na(App_New$BASEMENTAREA_MEDI))
+App_New_Replace$BASEMENTAREA_MEDI[Missing_Index32] <- median(App_New$BASEMENTAREA_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$BASEMENTAREA_MEDI))
+
+# Imputation for YEARS_BEGINEXPLUATATION_MEDI
+Missing_Index33 <- which(is.na(App_New$YEARS_BEGINEXPLUATATION_MEDI))
+App_New_Replace$YEARS_BEGINEXPLUATATION_MEDI[Missing_Index33] <- median(App_New$YEARS_BEGINEXPLUATATION_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BEGINEXPLUATATION_MEDI))
+
+# Imputation for YEARS_BUILD_MEDI
+Missing_Index34 <- which(is.na(App_New$YEARS_BUILD_MEDI))
+App_New_Replace$YEARS_BUILD_MEDI[Missing_Index34] <- median(App_New$YEARS_BUILD_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$YEARS_BUILD_MEDI))
+
+# Imputation for COMMONAREA_MEDI
+Missing_Index35 <- which(is.na(App_New$COMMONAREA_MEDI))
+App_New_Replace$COMMONAREA_MEDI[Missing_Index35] <- median(App_New$COMMONAREA_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$COMMONAREA_MEDI))
+
+# Imputation for ELEVATORS_MEDI
+Missing_Index36 <- which(is.na(App_New$ELEVATORS_MEDI))
+App_New_Replace$ELEVATORS_MEDI[Missing_Index36] <- median(App_New$ELEVATORS_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$ELEVATORS_MEDI))
+
+# Imputation for ENTRANCES_MEDI
+Missing_Index37 <- which(is.na(App_New$ENTRANCES_MEDI))
+App_New_Replace$ENTRANCES_MEDI[Missing_Index37] <- median(App_New$ENTRANCES_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$ENTRANCES_MEDI))
+
+# Imputation for FLOORSMAX_MEDI
+Missing_Index38 <- which(is.na(App_New$FLOORSMAX_MEDI))
+App_New_Replace$FLOORSMAX_MEDI[Missing_Index38] <- median(App_New$FLOORSMAX_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMAX_MEDI))
+
+# Imputation for FLOORSMIN_MEDI
+Missing_Index39 <- which(is.na(App_New$FLOORSMIN_MEDI))
+App_New_Replace$FLOORSMIN_MEDI[Missing_Index39] <- median(App_New$FLOORSMIN_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$FLOORSMIN_MEDI))
+
+# Imputation for LANDAREA_MEDI
+Missing_Index40 <- which(is.na(App_New$LANDAREA_MEDI))
+App_New_Replace$LANDAREA_MEDI[Missing_Index40] <- median(App_New$LANDAREA_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$LANDAREA_MEDI))
+
+# Imputation for LIVINGAPARTMENTS_MEDI
+Missing_Index41 <- which(is.na(App_New$LIVINGAPARTMENTS_MEDI))
+App_New_Replace$LIVINGAPARTMENTS_MEDI[Missing_Index41] <- median(App_New$ LIVINGAPARTMENTS_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$ LIVINGAPARTMENTS_MEDI))
+
+# Imputation for LIVINGAREA_MEDI
+Missing_Index42 <- which(is.na(App_New$LIVINGAREA_MEDI))
+App_New_Replace$LIVINGAREA_MEDI[Missing_Index42] <- median(App_New$LIVINGAREA_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$LIVINGAREA_MEDI))
+
+# Imputation for NONLIVINGAPARTMENTS_MEDI
+Missing_Index43 <- which(is.na(App_New$NONLIVINGAPARTMENTS_MEDI))
+App_New_Replace$NONLIVINGAPARTMENTS_MEDI[Missing_Index43] <- median(App_New$NONLIVINGAPARTMENTS_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAPARTMENTS_MEDI))
+
+# Imputation for NONLIVINGAREA_MEDI
+Missing_Index44 <- which(is.na(App_New$NONLIVINGAREA_MEDI))
+App_New_Replace$NONLIVINGAREA_MEDI[Missing_Index44] <- median(App_New$NONLIVINGAREA_MEDI,na.rm=TRUE)
+sum(is.na(App_New_Replace$NONLIVINGAREA_MEDI))
+
+# Imputation for TOTALAREA_MODE
+Missing_Index45 <- which(is.na(App_New$TOTALAREA_MODE))
+App_New_Replace$TOTALAREA_MODE[Missing_Index45] <- median(App_New$TOTALAREA_MODE,na.rm=TRUE)
+sum(is.na(App_New_Replace$TOTALAREA_MODE))
+
+# Imputation for OBS_30_CNT_SOCIAL_CIRCLE
+Missing_Index46 <- which(is.na(App_New$OBS_30_CNT_SOCIAL_CIRCLE))
+App_New_Replace$OBS_30_CNT_SOCIAL_CIRCLE[Missing_Index46] <- median(App_New$OBS_30_CNT_SOCIAL_CIRCLE,na.rm=TRUE)
+sum(is.na(App_New_Replace$OBS_30_CNT_SOCIAL_CIRCLE))
+
+# Imputation for DEF_30_CNT_SOCIAL_CIRCLE
+Missing_Index47 <- which(is.na(App_New$DEF_30_CNT_SOCIAL_CIRCLE))
+App_New_Replace$DEF_30_CNT_SOCIAL_CIRCLE[Missing_Index47] <- median(App_New$DEF_30_CNT_SOCIAL_CIRCLE,na.rm=TRUE)
+sum(is.na(App_New_Replace$DEF_30_CNT_SOCIAL_CIRCLE))
+
+# Imputation for OBS_60_CNT_SOCIAL_CIRCLE
+Missing_Index48 <- which(is.na(App_New$OBS_60_CNT_SOCIAL_CIRCLE))
+App_New_Replace$OBS_60_CNT_SOCIAL_CIRCLE[Missing_Index48] <- median(App_New$OBS_60_CNT_SOCIAL_CIRCLE,na.rm=TRUE)
+sum(is.na(App_New_Replace$OBS_60_CNT_SOCIAL_CIRCLE))
+
+
+# Imputation for DEF_60_CNT_SOCIAL_CIRCLE
+Missing_Index49 <- which(is.na(App_New$DEF_60_CNT_SOCIAL_CIRCLE))
+App_New_Replace$DEF_60_CNT_SOCIAL_CIRCLE[Missing_Index49] <- median(App_New$DEF_60_CNT_SOCIAL_CIRCLE,na.rm=TRUE)
+sum(is.na(App_New_Replace$DEF_60_CNT_SOCIAL_CIRCLE))
+
+# Imputation for DAYS_LAST_PHONE_CHANGE
+Missing_Index50 <- which(is.na(App_New$DAYS_LAST_PHONE_CHANGE))
+App_New_Replace$DAYS_LAST_PHONE_CHANGE[Missing_Index50] <- median(App_New$DAYS_LAST_PHONE_CHANGE,na.rm=TRUE)
+sum(is.na(App_New_Replace$DAYS_LAST_PHONE_CHANGE))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_HOUR
+Missing_Index51 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_HOUR))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_HOUR[Missing_Index51] <- median(App_New$AMT_REQ_CREDIT_BUREAU_HOUR,na.rm=TRUE)
+sum(is.na(App_New_Replace$AMT_REQ_CREDIT_BUREAU_HOUR))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_DAY
+Missing_Index52 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_DAY))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_DAY[Missing_Index52] <- median(App_New$AMT_REQ_CREDIT_BUREAU_DAY,na.rm=TRUE)
+sum(is.na(App_New_Replace$AMT_REQ_CREDIT_BUREAU_DAY))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_WEEK
+Missing_Index53 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_WEEK))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_WEEK[Missing_Index53] <- median(App_New$AMT_REQ_CREDIT_BUREAU_WEEK,na.rm=TRUE)
+sum(is.na(App_New_Replace$AMT_REQ_CREDIT_BUREAU_WEEK))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_MON
+Missing_Index54 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_MON))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_MON[Missing_Index54] <- median(App_New$AMT_REQ_CREDIT_BUREAU_MON,na.rm=TRUE)
+sum(is.na(App_New_Replace$AMT_REQ_CREDIT_BUREAU_MON))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_QRT
+Missing_Index55 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_QRT))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_QRT[Missing_Index55] <- median(App_New$AMT_REQ_CREDIT_BUREAU_QRT,na.rm=TRUE)
+sum(is.na(App_New_Replace$AMT_REQ_CREDIT_BUREAU_QRT))
+
+# Imputation for AMT_REQ_CREDIT_BUREAU_YEAR
+Missing_Index56 <- which(is.na(App_New$AMT_REQ_CREDIT_BUREAU_YEAR))
+App_New_Replace$AMT_REQ_CREDIT_BUREAU_YEAR[Missing_Index56] <- median(App_New$AMT_REQ_CREDIT_BUREAU_YEAR,na.rm=TRUE)
+sum(is.na(App_New_Replace))
+
+# Imputation for ENTRANCES_AVG
+Missing_Index57 <- which(is.na(App_New$ENTRANCES_AVG))
+App_New_Replace$ENTRANCES_AVG[Missing_Index57] <- median(App_New$ENTRANCES_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$ENTRANCES_AVG))
+
+# Imputation for ENTRANCES_AVG
+Missing_Index58 <- which(is.na(App_New$ENTRANCES_AVG))
+App_New_Replace$ENTRANCES_AVG[Missing_Index58] <- median(App_New$ENTRANCES_AVG,na.rm=TRUE)
+sum(is.na(App_New_Replace$ENTRANCES_AVG))
+
+# Imputation for OWN_CAR_AGE
+Missing_Index59 <- which(is.na(App_New$OWN_CAR_AGE))
+App_New_Replace$OWN_CAR_AGE[Missing_Index59] <- median(App_New$OWN_CAR_AGE,na.rm=TRUE)
+sum(is.na(App_New_Replace))
+
+# Imputation for CNT_FAM_MEMBER
+Missing_Index60 <- which(is.na(App_New$CNT_FAM_MEMBERS))
+App_New_Replace$CNT_FAM_MEMBERS[Missing_Index60] <- median(App_New$CNT_FAM_MEMBERS,na.rm=TRUE)
+sum(is.na(App_New_Replace$CNT_FAM_MEMBERS))
+
+###########################################################
+# Check for whether there is missing data in Entire Dataset##
+###########################################################
+summary(App_New_Replace)
+sum(is.na(App_New_Replace))
